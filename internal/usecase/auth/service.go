@@ -78,6 +78,7 @@ func (s *Service) AuthMiddleware(ctx *fiber.Ctx) error {
 	if !ok {
 		return entity.ErrRespUnauthorized(errors.New("unable to get 'pass' from claims"))
 	}
+
 	if err := db.ModelContext(c.Context(), &u).
 		Where("id = ? AND password = crypt(?, password)", userId, userPass).
 		Select(); err != nil {
