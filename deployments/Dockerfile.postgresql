@@ -1,0 +1,4 @@
+FROM postgres
+
+ADD ./fixtures /docker-entrypoint-initdb.d/
+EXPOSE 5432
