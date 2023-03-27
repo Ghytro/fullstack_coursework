@@ -1,4 +1,3 @@
-
 version: '3'
 
 services:
@@ -14,17 +13,29 @@ services:
 
   db:
     hostname: dockerdev.db
-    build:
-      dockerfile: ./deployments/Dockerfile.postgresql
-      context: ../
+    image: postgres:15.2
     environment:
       - POSTGRES_PASSWORD=mydbpassword
     container_name: myapp-db
     ports:
       - "5432:5432"
 
+  mongo:
+    hostname: mongo.dev
+    image: mongo
+    container_name: mongo-db
+    environment:
+      - MONGO_INITDB_DATABASE=mydb
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=mysecretpassword
+    ports:
+      - "27017:27017"
+
   web-server:
-    image: nginx
+    build:
+      dockerfile: ./Dockerfile.nginx
+      context: ../
+      target: nginx_prod
     container_name: myapp-nginx
     ports:
       - "8080:8080"

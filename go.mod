@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/pressly/goose v2.7.0+incompatible
 	github.com/samber/lo v1.38.1
+	github.com/sirupsen/logrus v1.9.0
 	go.mongodb.org/mongo-driver v1.11.3
 )
 

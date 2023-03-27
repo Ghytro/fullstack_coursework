@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Ghytro/galleryapp/internal/database/objectstore"
 	"github.com/go-pg/pg/v10/types"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -13,79 +14,95 @@ type PK uint
 
 type baseEntity struct {
 	CreatedAt time.Time      `pg:"created_at"`
+	UpdatedAt types.NullTime `pg:"updated_at"`
 	DeletedAt types.NullTime `pg:"deleted_at"`
 }
 
-type pkID struct {
-	ID PK `pg:"id,pk"`
-}
+type ImageID objectstore.FileID
 
 type User struct {
 	tableName struct{} `pg:"users"`
 
-	pkID
 	baseEntity
 
-	Username  string  `pg:"username,notnull" form:"username"`
-	FirstName *string `pg:"first_name" form:"first_name"`
-	LastName  *string `pg:"last_name" form:"last_name"`
+	ID        PK      `pg:"id,pk" json:"id"`
+	Username  string  `pg:"username,notnull" json:"username"`
+	FirstName *string `pg:"first_name" json:"first_name"`
+	LastName  *string `pg:"last_name" json:"last_name"`
 
-	Password  string  `pg:"password,notnull" form:"password"`
-	Bio       *string `pg:"bio" form:"bio"`
-	AvatarUrl *string `pg:"avatar_url" form:"avatar_url"`
-	Country   *string `pg:"country" form:"country"`
+	Password      string   `pg:"password,notnull" json:"password"`
+	Bio           *string  `pg:"bio" json:"bio"`
+	AvatarImageID *ImageID `pg:"avatar_image_id,type:char(24)" json:"avatar_url"`
 
-	Polls []*Poll `pg:"rel:has-many"`
-	Votes []*Vote `pg:"rel:has-many"`
+	Posts         []*Post         `pg:"rel:has-many"`
+	Subscribers   []*Subscription `pg:"rel:has-many"`
+	Subscriptions []*Subscription `pg:"rel:has-many"`
 }
 
-type Poll struct {
-	tableName struct{} `pg:"polls"`
+type UUID uuid.UUID
 
-	pkID
+type Post struct {
+	tableName struct{} `pg:"posts"`
+
 	baseEntity
 
-	CreatorID PK    `pg:"creator_id"`
-	Creator   *User `pg:"rel:has-one"`
+	ID UUID `pg:"id,pk"`
 
-	Topic          string        `pg:"topic,notnull"`
-	IsAnonymous    bool          `pg:"is_anonymous,notnull"`
-	MultipleChoice bool          `pg:"multiple_choice,notnull"`
-	RevoteAbility  bool          `pg:"revote_ability,notnull"`
-	Options        []*PollOption `pg:"rel:has-many"`
-}
-
-type PollOption struct {
-	tableName struct{} `pg:"poll_options"`
-
-	pkID
-
-	PollID PK    `pg:"poll_id"`
-	Poll   *Poll `pg:"rel:has-one"`
-
-	Votes []*Vote `pg:"rel:has-many"`
-
-	VotesAmount int `pg:"-"`
-
-	Index     int            `pg:"index,notnull"`
-	Option    string         `pg:"option,notnull"`
-	UpdatedAt types.NullTime `pg:"updated_at"`
-}
-
-type Vote struct {
-	tableName struct{} `pg:"votes"`
-
-	baseEntity
-	ID uuid.UUID `pg:"id"`
-
-	UserID PK    `pg:"user_id,notnull"`
+	UserID PK    `pg:"user_id"`
 	User   *User `pg:"rel:has-one"`
 
-	OptionID PK          `pg:"option_id,notnull"`
-	Option   *PollOption `pg:"rel:has-one"`
+	Caption *string `pg:"caption"`
+	ImageID ImageID `pg:"image_id,type:char(24)" json:"image_id"`
+}
 
-	PollID PK    `pg:"poll_id,notnull"`
-	Poll   *Poll `pg:"rel:has-one"`
+type Subscription struct {
+	tableName struct{} `pg:"subscriptions"`
+
+	SubscriberID PK    `pg:"subscriber_id"`
+	Subscriber   *User `pg:"rel:has-one"`
+
+	PublisherID PK    `pg:"publisher_id"`
+	Publisher   *User `pg:"rel:has-one"`
+}
+
+type Like struct {
+	tableName struct{} `pg:"likes"`
+
+	baseEntity
+
+	PostID UUID  `pg:"post_id"`
+	Post   *Post `pg:"rel:has-one"`
+
+	UserID PK    `pg:"user_id"`
+	User   *User `pg:"rel:has-one"`
+}
+
+type Comment struct {
+	tableName struct{} `pg:"comments"`
+
+	baseEntity
+
+	ID UUID `pg:"id,pk"`
+
+	PostID UUID  `pg:"post_id"`
+	Post   *Post `pg:"rel:has-one"`
+
+	UserID PK    `pg:"user_id"`
+	User   *User `pg:"rel:has-one"`
+
+	Content string `pg:"content,use_zero"`
+}
+
+type CommentLike struct {
+	tableName struct{} `pg:"comment_likes"`
+
+	baseEntity
+
+	CommentID UUID     `pg:"comment_id"`
+	Comment   *Comment `pg:"rel:has-one"`
+
+	UserID PK    `pg:"user_id"`
+	User   *User `pg:"rel:has-one"`
 }
 
 type ErrResponse struct {

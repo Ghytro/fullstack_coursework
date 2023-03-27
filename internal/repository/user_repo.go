@@ -7,28 +7,14 @@ import (
 	"github.com/Ghytro/galleryapp/internal/common"
 	"github.com/Ghytro/galleryapp/internal/database"
 	"github.com/Ghytro/galleryapp/internal/entity"
+	"github.com/samber/lo"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
-	"github.com/samber/lo"
 )
 
 type UserRepository struct {
-	db DBI
-}
-
-func NewUserRepo(db DBI) *UserRepository {
-	return &UserRepository{
-		db: db,
-	}
-}
-
-func (m *UserRepository) RunInTransaction(ctx context.Context, f func(tx *database.TX) error) error {
-	return m.db.RunInTransaction(ctx, f)
-}
-
-func (m *UserRepository) WithTX(tx *database.TX) *UserRepository {
-	return NewUserRepo(tx)
+	*MonoRepo
 }
 
 func (m *UserRepository) CreateUser(ctx context.Context, user *entity.User) (entity.PK, error) {
@@ -42,8 +28,7 @@ func (m *UserRepository) CreateUser(ctx context.Context, user *entity.User) (ent
 					Value("first_name", "?", user.FirstName).
 					Value("last_name", "?", user.LastName).
 					Value("bio", "?", user.Bio).
-					Value("avatar_url", "?", user.AvatarUrl).
-					Value("country", "?", user.Country).
+					Value("avatar_image_id", "?", user.AvatarImageID).
 					Returning("*").Insert()
 				return _err
 			}
@@ -58,8 +43,7 @@ func (m *UserRepository) CreateUser(ctx context.Context, user *entity.User) (ent
 			last_name = ?,
 			password = crypt(?, password),
 			bio = ?,
-			avatar_url = ?,
-			country = ?,
+			avatar_image_id = ?,
 			created_at = NOW(),
 			deleted_at = NULL`,
 			user.Username,
@@ -67,8 +51,7 @@ func (m *UserRepository) CreateUser(ctx context.Context, user *entity.User) (ent
 			user.LastName,
 			user.Password,
 			user.Bio,
-			user.AvatarUrl,
-			user.Country,
+			user.AvatarImageID,
 		).Update()
 		return err
 	})
@@ -77,63 +60,40 @@ func (m *UserRepository) CreateUser(ctx context.Context, user *entity.User) (ent
 
 func (m *UserRepository) GetUser(ctx context.Context, userID entity.PK) (*entity.User, error) {
 	var u entity.User
-	if err := m.db.ModelContext(ctx, &u).Where("id = ? AND deleted_at IS NULL", userID).Select(); err != nil {
+	if err := m.db.WithContext(ctx).Model(&u).Where("id = ? AND deleted_at IS NULL", userID).Select(); err != nil {
 		return nil, err
-	}
-	return &u, nil
-}
-
-func (m *UserRepository) GetUserWithPolls(ctx context.Context, userID entity.PK, limit int) (*entity.User, error) {
-	var (
-		u       entity.User
-		options []*entity.PollOption
-	)
-	err := m.db.RunInTransaction(ctx, func(tx *database.TX) error {
-		if err := tx.ModelContext(ctx, &u).Where("id = ? AND deleted_at IS NULL", userID).Select(); err != nil {
-			return err
-		}
-		q := tx.ModelContext(ctx, &u.Polls).Where("creator_id = ?", userID).Order("created_at DESC")
-		if limit != -1 {
-			q = q.Limit(limit)
-		}
-		if err := q.Select(); err != nil {
-			return err
-		}
-		if len(u.Polls) == 0 {
-			return nil
-		}
-		pollsIDs := lo.Map(u.Polls, func(item *entity.Poll, index int) entity.PK {
-			return item.ID
-		})
-		return tx.ModelContext(ctx, &options).Where("poll_id IN (?)", pg.In(pollsIDs)).Order("index ASC").Select()
-	})
-	if err != nil {
-		return nil, err
-	}
-	pollsMapping := make(map[entity.PK]*entity.Poll)
-	for _, p := range u.Polls {
-		pollsMapping[p.ID] = p
-	}
-	for _, o := range options {
-		p := pollsMapping[o.PollID]
-		p.Options = append(p.Options, o)
 	}
 	return &u, nil
 }
 
 func (m *UserRepository) UpdateUser(ctx context.Context, user *entity.User) error {
-	_, err := m.db.ModelContext(ctx, user).Where("id = ? AND deleted_at IS NULL", user.ID).Update()
+	_, err := m.db.WithContext(ctx).Model(user).Where("id = ? AND deleted_at IS NULL", user.ID).Set(
+		`username = ?,
+		first_name = ?,
+		last_name = ?,
+		password = crypt(?, password),
+		bio = ?,
+		avatar_image_id = ?,
+		created_at = NOW(),
+		deleted_at = NULL`,
+		user.Username,
+		user.FirstName,
+		user.LastName,
+		user.Password,
+		user.Bio,
+		user.AvatarImageID,
+	).Update()
 	return err
 }
 
 func (m *UserRepository) DeleteUser(ctx context.Context, userID entity.PK) error {
-	_, err := m.db.ModelContext(ctx, (*entity.User)(nil)).Set("deleted_at = NOW()").Where("id = ?", userID).Update()
+	_, err := m.db.WithContext(ctx).Model((*entity.User)(nil)).Set("deleted_at = NOW()").Where("id = ?", userID).Update()
 	return err
 }
 
 func (m *UserRepository) Auth(ctx context.Context, username string, password string) (entity.PK, error) {
 	var u entity.User
-	if err := m.db.ModelContext(ctx, &u).Where("username = ? AND password = crypt(?, password)", username, password).Select(); err != nil {
+	if err := m.db.WithContext(ctx).Model(ctx, &u).Where("username = ? AND password = crypt(?, password)", username, password).Select(); err != nil {
 		return 0, err
 	}
 	return u.ID, nil
@@ -167,5 +127,43 @@ func (m *UserRepository) GetUserListSearch(ctx context.Context, filter *UserSear
 	return u, err
 }
 
+// GetSubscriptionCount собрать полную инфу о подписках по пользователю (сколько подписчиков и подписок)
+func (r *UserRepository) GetSubscriptionCount(ctx context.Context, userID entity.PK) (subscribed uint, subscriptions uint, err error) {
+	var subscribedI, subscriptionsI int
+	err = r.db.RunInTransaction(ctx, func(tx *database.TX) error {
+		if subscribedI, err = tx.ModelContext(ctx, (*entity.Subscription)(nil)).Where("publisher_id = ?", userID).Count(); err != nil {
+			return err
+		}
+		subscriptionsI, err = tx.ModelContext(ctx, (*entity.Subscription)(nil)).Where("subscriber_id = ?", userID).Count()
+		return err
+	})
+	return uint(subscribedI), uint(subscriptionsI), err
+}
+
+func (r *UserRepository) GetSubscribers(ctx context.Context, userID entity.PK, pageSize, pageNum uint) ([]entity.PK, error) {
+	var res []*entity.Subscription
+	if err := r.db.WithContext(ctx).Model(&res).Order("publisher_id").Limit(int(pageSize)).Offset(int((pageNum - 1) * pageSize)).Select(); err != nil {
+		return nil, err
+	}
+	return lo.Map(res, func(s *entity.Subscription, _ int) entity.PK { return s.SubscriberID }), nil
+}
+
+func (r *UserRepository) GetSubscribed(ctx context.Context, userID entity.PK, pageSize, pageNum uint) ([]entity.PK, error) {
+	var res []*entity.Subscription
+	if err := r.db.WithContext(ctx).Model(&res).Order("subscriber_id").Limit(int(pageSize)).Offset(int((pageNum - 1) * pageSize)).Select(); err != nil {
+		return nil, err
+	}
+	return lo.Map(res, func(s *entity.Subscription, _ int) entity.PK { return s.PublisherID }), nil
+}
+
 type IUserRepository interface {
+	Auth(ctx context.Context, username string, password string) (entity.PK, error)
+	CreateUser(ctx context.Context, user *entity.User) (entity.PK, error)
+	DeleteUser(ctx context.Context, userID entity.PK) error
+	GetUser(ctx context.Context, userID entity.PK) (*entity.User, error)
+	GetUserListSearch(ctx context.Context, filter *UserSearchFilter) ([]*entity.User, error)
+	UpdateUser(ctx context.Context, user *entity.User) error
+	GetSubscriptionCount(ctx context.Context, userID entity.PK) (subscribed uint, subscriptions uint, err error)
+	GetSubscribers(ctx context.Context, userID entity.PK, pageSize, pageNum uint) ([]entity.PK, error)
+	GetSubscribed(ctx context.Context, userID entity.PK, pageSize, pageNum uint) ([]entity.PK, error)
 }

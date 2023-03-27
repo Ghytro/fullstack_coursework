@@ -65,11 +65,6 @@ type FileID struct {
 	primitive.ObjectID
 }
 
-func (id FileID) String() string {
-	s := id.ObjectID.String()
-	return s[10 : len(s)-2]
-}
-
 var NilFileID FileID = FileID{primitive.NilObjectID}
 
 type File struct {
