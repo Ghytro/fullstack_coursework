@@ -9,6 +9,7 @@ require (
 	github.com/gofiber/jwt/v3 v3.3.6
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/uuid v1.3.0
+	github.com/lib/pq v1.10.8
 	github.com/pressly/goose v2.7.0+incompatible
 	github.com/samber/lo v1.38.1
 	github.com/sirupsen/logrus v1.9.0

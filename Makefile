@@ -1,7 +1,7 @@
 start.local:
-	cd cmd/github.com/Ghytro/galleryapp && go build -o app && cd ../../ && \
+	cd cmd/fullstack_coursework && go build -o app && cd ../../ && \
 	DB_URL="postgres://postgres:mydbpassword@dockerdev.db:5432/postgres?sslmode=disable&" \
-	./cmd/github.com/Ghytro/galleryapp/app
+	./cmd/fullstack_coursework/app
 
 start.db:
 	cd deployments && docker compose up -d db
