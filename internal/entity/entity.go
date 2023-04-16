@@ -5,38 +5,34 @@ import (
 	"time"
 
 	"github.com/Ghytro/galleryapp/internal/database/objectstore"
-	"github.com/go-pg/pg/v10/types"
+	"github.com/Ghytro/galleryapp/internal/validation"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
 type PK uint
 
-type baseEntity struct {
-	CreatedAt time.Time      `pg:"created_at"`
-	UpdatedAt types.NullTime `pg:"updated_at"`
-	DeletedAt types.NullTime `pg:"deleted_at"`
-}
-
 type ImageID objectstore.FileID
 
 type User struct {
 	tableName struct{} `pg:"users"`
 
-	baseEntity
-
-	ID        PK      `pg:"id,pk" json:"id"`
-	Username  string  `pg:"username,notnull" json:"username"`
-	FirstName *string `pg:"first_name" json:"first_name"`
-	LastName  *string `pg:"last_name" json:"last_name"`
-
+	ID            PK       `pg:"id,pk" json:"id"`
+	Username      string   `pg:"username,notnull" json:"username"`
 	Password      string   `pg:"password,notnull" json:"password"`
 	Bio           *string  `pg:"bio" json:"bio"`
-	AvatarImageID *ImageID `pg:"avatar_image_id,type:char(24)" json:"avatar_url"`
+	AvatarImageID *ImageID `pg:"avatar_image_id,type:char(24)" json:"avatar_image_id"`
+}
 
-	Posts         []*Post         `pg:"rel:has-many"`
-	Subscribers   []*Subscription `pg:"rel:has-many"`
-	Subscriptions []*Subscription `pg:"rel:has-many"`
+func (user *User) Validate() error {
+	if err := validation.ValidateUserName(user.Username); err != nil {
+		return err
+	}
+
+	if err := validation.ValidateUserPassword(user.Password); err != nil {
+		return err
+	}
+	return nil
 }
 
 type UUID uuid.UUID
@@ -44,31 +40,25 @@ type UUID uuid.UUID
 type Post struct {
 	tableName struct{} `pg:"posts"`
 
-	baseEntity
-
 	ID UUID `pg:"id,pk"`
 
-	UserID PK    `pg:"user_id"`
-	User   *User `pg:"rel:has-one"`
+	UserID PK    `pg:"user_id" json:"-"`
+	User   *User `pg:"rel:has-one" json:"-"`
 
-	Caption *string `pg:"caption"`
+	Caption *string `pg:"caption" json:"caption"`
 	ImageID ImageID `pg:"image_id,type:char(24)" json:"image_id"`
-}
 
-type Subscription struct {
-	tableName struct{} `pg:"subscriptions"`
+	CreatedAt time.Time `pg:"created_at" json:"created_at"`
 
-	SubscriberID PK    `pg:"subscriber_id"`
-	Subscriber   *User `pg:"rel:has-one"`
-
-	PublisherID PK    `pg:"publisher_id"`
-	Publisher   *User `pg:"rel:has-one"`
+	Comments    []*Comment `pg:"rel:has-many"`
+	LikesAmount uint       `json:"likes"`
+	Likes       []*Like    `pg:"rel:has-many" json:"who_liked"`
 }
 
 type Like struct {
 	tableName struct{} `pg:"likes"`
 
-	baseEntity
+	CreatedAt time.Time `pg:"created_at"`
 
 	PostID UUID  `pg:"post_id"`
 	Post   *Post `pg:"rel:has-one"`
@@ -80,9 +70,9 @@ type Like struct {
 type Comment struct {
 	tableName struct{} `pg:"comments"`
 
-	baseEntity
-
 	ID UUID `pg:"id,pk"`
+
+	CreatedAt time.Time `pg:"created_at"`
 
 	PostID UUID  `pg:"post_id"`
 	Post   *Post `pg:"rel:has-one"`
@@ -91,18 +81,6 @@ type Comment struct {
 	User   *User `pg:"rel:has-one"`
 
 	Content string `pg:"content,use_zero"`
-}
-
-type CommentLike struct {
-	tableName struct{} `pg:"comment_likes"`
-
-	baseEntity
-
-	CommentID UUID     `pg:"comment_id"`
-	Comment   *Comment `pg:"rel:has-one"`
-
-	UserID PK    `pg:"user_id"`
-	User   *User `pg:"rel:has-one"`
 }
 
 type ErrResponse struct {

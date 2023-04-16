@@ -2,10 +2,13 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/Ghytro/galleryapp/internal/database"
 	"github.com/sirupsen/logrus"
 )
+
+var ErrOptimisticLock = errors.New("optimistic lock not acquired")
 
 type MonoRepo struct {
 	db  *database.PGDB
@@ -48,4 +51,6 @@ func (r *MonoRepo) RunInTransaction(ctx context.Context, fn func(ctx context.Con
 
 type IRepository interface {
 	IUserRepository
+
+	RunInTransaction(ctx context.Context, fn func(ctx context.Context, repo IRepository) error) error
 }
